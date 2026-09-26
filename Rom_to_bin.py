@@ -1,35 +1,29 @@
-
 from pathlib import Path
 import hashlib
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import sys
 
 
 def convert_smd(data: bytes) -> bytes:
-    """
-    Converte uma ROM SMD para BIN.
-    Remove o header de 512 bytes e desfaz o interleaving.
-    """
+    """Converte uma ROM SMD para BIN."""
 
-    # SMD possui um header de 512 bytes.
     if len(data) < 0x200:
         raise ValueError("Arquivo SMD muito pequeno.")
 
+    # Remove o header SMD de 512 bytes
     data = data[0x200:]
 
     output = bytearray()
 
-    # Processa os blocos SMD de 0x4000 bytes.
+    # Processa os blocos de 0x4000 bytes
     for block_start in range(0, len(data), 0x4000):
         block = data[block_start:block_start + 0x4000]
 
-        # Um bloco incompleto não deve ser processado como SMD.
         if len(block) != 0x4000:
             raise ValueError(
                 f"Bloco SMD incompleto em 0x{block_start:X}."
             )
 
-        # SMD armazena os bytes pares/ímpares separados.
+        # Desinterleave
         for i in range(0, len(block), 2):
             output.append(block[0x2000 + i // 2])
             output.append(block[i // 2])
@@ -38,9 +32,7 @@ def convert_smd(data: bytes) -> bytes:
 
 
 def convert_rom(input_file: Path) -> bytes:
-    """
-    Converte uma ROM .SMD, .MD ou .BIN para BIN.
-    """
+    """Converte SMD/MD/BIN para BIN."""
 
     extension = input_file.suffix.lower()
     data = input_file.read_bytes()
@@ -48,92 +40,90 @@ def convert_rom(input_file: Path) -> bytes:
     if extension == ".smd":
         return convert_smd(data)
 
-    elif extension in (".md", ".bin"):
-        # .MD e .BIN são tratados como ROM binária normal.
+    if extension in (".md", ".bin"):
         return data
 
-    else:
-        raise ValueError(
-            f"Formato não suportado: {input_file.suffix}"
-        )
+    raise ValueError(
+        f"Formato não suportado: {extension}"
+    )
 
 
 def main():
-    root = tk.Tk()
-    root.withdraw()
+    print("================================")
+    print("       TMT MegaComp")
+    print("      ROM Converter")
+    print("================================")
+    print()
 
-    # Selecionar ROM
-    input_path = filedialog.askopenfilename(
-        title="Selecione uma ROM do Mega Drive",
-        filetypes=[
-            (
-                "ROMs do Mega Drive",
-                "*.smd *.md *.bin"
-            ),
-            ("SMD", "*.smd"),
-            ("MD", "*.md"),
-            ("BIN", "*.bin"),
-            ("Todos os arquivos", "*.*"),
-        ],
-    )
+    # Permite passar a ROM como argumento:
+    #
+    # MegaCompROMConv.exe "Sonic 3.smd"
+    #
+    if len(sys.argv) >= 2:
+        input_path = Path(sys.argv[1])
 
-    if not input_path:
-        return
-
-    input_file = Path(input_path)
-
-    # Nome padrão do arquivo de saída
-    output_file = input_file.with_suffix(".bin")
-
-    # Se a entrada já for BIN, perguntar onde salvar
-    if input_file.suffix.lower() == ".bin":
-        output_path = filedialog.asksaveasfilename(
-            title="Salvar BIN",
-            initialfile=input_file.name,
-            defaultextension=".bin",
-            filetypes=[
-                ("BIN", "*.bin"),
-                ("Todos os arquivos", "*.*"),
-            ],
+    else:
+        input_path = Path(
+            input("Digite o caminho da ROM:\n> ").strip('" ')
         )
 
-        if not output_path:
-            return
+    if not input_path.exists():
+        print()
+        print("ERRO: arquivo não encontrado.")
+        return 1
 
-        output_file = Path(output_path)
+    if not input_path.is_file():
+        print()
+        print("ERRO: o caminho informado não é um arquivo.")
+        return 1
+
+    extension = input_path.suffix.lower()
+
+    if extension not in (".smd", ".md", ".bin"):
+        print()
+        print(f"ERRO: formato não suportado: {extension}")
+        return 1
+
+    print(f"ROM: {input_path.name}")
+    print(f"Formato detectado: {extension[1:].upper()}")
+    print(f"Tamanho original: {input_path.stat().st_size:,} bytes")
+    print()
 
     try:
-        # Converter
-        output = convert_rom(input_file)
-
-        # Salvar
-        output_file.write_bytes(output)
-
-        # Calcular MD5
-        md5 = hashlib.md5(output).hexdigest()
-
-        message = (
-            "ROM convertida com sucesso!\n\n"
-            f"Entrada:\n{input_file.name}\n\n"
-            f"Saída:\n{output_file.name}\n\n"
-            f"Tamanho: {len(output):,} bytes\n"
-            f"MD5: {md5}"
-        )
-
-        print(message)
-
-        messagebox.showinfo(
-            "MegaComp ROM Converter",
-            message
-        )
+        output = convert_rom(input_path)
 
     except Exception as error:
-        messagebox.showerror(
-            "Erro",
-            f"Não foi possível converter a ROM:\n\n{error}"
-        )
+        print(f"ERRO durante a conversão: {error}")
+        return 1
+
+    # Nome padrão do BIN
+    output_file = input_path.with_suffix(".bin")
+
+    # Caso o usuário tenha passado um segundo argumento:
+    #
+    # MegaCompROMConv.exe "Sonic 3.md" "S3.bin"
+    #
+    if len(sys.argv) >= 3:
+        output_file = Path(sys.argv[2])
+
+    print("Convertendo...")
+
+    output_file.write_bytes(output)
+
+    md5 = hashlib.md5(output).hexdigest()
+
+    print()
+    print("Arquivo criado:")
+    print(output_file)
+    print()
+    print(f"Tamanho: {len(output):,} bytes")
+    print(f"MD5:     {md5}")
+    print()
+    print("Concluído!")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 
