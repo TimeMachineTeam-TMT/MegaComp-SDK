@@ -1,12 +1,13 @@
 from pathlib import Path
-from SCRIPT.rom_to_bin import convert
-from SCRIPT.disassembler import disassemble
-from SCRIPT.analyzer import analyze
-from SCRIPT.codegen import generate
+
+from SCRIPT.rom_to_bin    import convert
+from SCRIPT.disassembler  import disassemble
+from SCRIPT.analyzer      import analyze
+from SCRIPT.codegen       import generate
+from SCRIPT.input         import generate as generate_input
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-
 PROJECTS_DIR = ROOT_DIR / "PROJECTS"
 OUTPUT_DIR = ROOT_DIR / "OUTPUT"
 
@@ -66,30 +67,12 @@ def main():
         default_name
     )
 
-    output_name = ask_name(
-        "Nome do executável",
-        default_name
-    )
-
-    if output_name.lower().endswith(".exe"):
-        output_name = output_name[:-4]
-
     # ==============================
     # DIRETÓRIOS
     # ==============================
 
     project_dir = PROJECTS_DIR / project_name
-    output_dir = OUTPUT_DIR
-
-    project_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    output_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    project_dir.mkdir(parents=True, exist_ok=True)
 
     print()
     print("----------------------------------------")
@@ -97,7 +80,6 @@ def main():
     print("----------------------------------------")
     print(f"ROM:     {rom_path}")
     print(f"Projeto: {project_dir}")
-    print(f"Output:  {output_dir / (output_name + '.exe')}")
     print()
 
     # ==============================
@@ -133,32 +115,44 @@ def main():
     analysis = analyze(asm_path, bin_path)
 
     # ==============================
+    # INPUT
+    # ==============================
+
+    print()
+    print("----------------------------------------")
+    print("Etapa 4: Tradução de Input")
+    print("----------------------------------------")
+
+    input_path = generate_input(project_dir)
+
+    # ==============================
     # CODEGEN
     # ==============================
 
     print()
     print("----------------------------------------")
-    print("Etapa 4: 68000 → x86-64")
+    print("Etapa 5: 68000 → x86-64")
     print("----------------------------------------")
 
     win_asm_path = generate(analysis, project_dir)
 
     # ==============================
-    # BUILD
+    # RESUMO
     # ==============================
-
-    print()
-    print("----------------------------------------")
-    print("Etapa 5: Build")
-    print("----------------------------------------")
-
-    # Futuramente:
-    # build.build(win_asm_path, output_dir, output_name)
 
     print()
     print("========================================")
     print("       MegaComp concluído!")
     print("========================================")
+    print()
+    print("Arquivos gerados:")
+    print(f"  BIN        : {bin_path}")
+    print(f"  ASM 68000  : {asm_path}")
+    print(f"  Input (inc): {input_path}")
+    print(f"  ASM x86-64 : {win_asm_path}")
+    print()
+    print("Para compilar o ASM x86-64, veja:")
+    print(f"  {project_dir / 'README_BUILD.md'}")
 
 
 if __name__ == "__main__":
