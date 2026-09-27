@@ -63,8 +63,8 @@ public md_ram
 md_ram db 65536 dup(0)
 
 ; --- ROM (definida pelo codegen) ---
-extern rom_data:byte
-extern rom_size:qword
+;extern rom_data:byte
+;extern rom_size:qword
 
 .code
 
@@ -160,13 +160,12 @@ write_word PROC
     push rbx
     push r12
     mov rbx, rcx
-    mov r12w, dx
+    movzx r12d, dx           ; <-- corrigido: zero-extend
     mov edx, r12d
     shr edx, 8
     call write_byte
     lea rcx, [rbx + 1]
-    movzx edx, r12w
-    and edx, 0FFh
+    movzx edx, r12b          ; <-- byte baixo
     call write_byte
     pop r12
     pop rbx
@@ -183,7 +182,7 @@ write_long PROC
     shr edx, 16
     call write_word
     lea rcx, [rbx + 2]
-    movzx edx, r12w
+    movzx edx, r12w          ; <-- zero-extend do low word
     call write_word
     pop r12
     pop rbx

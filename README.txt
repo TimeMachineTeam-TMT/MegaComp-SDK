@@ -16,3 +16,5 @@ HOW TO USE:
 2-Insert the ROM's path
 3-Wait for the <ROMname>_x64.asm file to appear at the OUTPUT folder
 4-Build it using MASM (ml64.exe) and your regular linker
+
+Extra: test.bin may be used for testing

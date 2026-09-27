@@ -118,7 +118,6 @@ def emit_load_ea(ea, size):
             f"    call {read}",
         ]
 
-    # d16(An), d8(An,Xn)
     m = re.match(
         r"^([+-]?\d+)\(A([0-7])(?:,([DA])([0-7])(\.W|\.L)?)?\)$",
         ea,
@@ -265,7 +264,6 @@ def emit_instruction(insn, labels):
             src, dst = parts
             lines += emit_load_ea(src, size)
             lines.append(f"    and eax, {_mask_for(size)}")
-            # Salva valor mascarado para flags antes do store
             lines.append("    mov r9d, eax")
             lines += emit_store_ea(dst, size)
             lines.append("    mov eax, r9d")
@@ -278,7 +276,6 @@ def emit_instruction(insn, labels):
         parts = _split(ops)
         if len(parts) == 2:
             src, dst = parts
-            # LEA carrega o endereço efetivo
             if src.startswith("$"):
                 a = int(src[1:], 16)
                 lines.append(f"    mov eax, {a}")
@@ -308,9 +305,9 @@ def emit_instruction(insn, labels):
             src, dst = parts
             lines += emit_load_ea(src, size)
             lines.append(f"    and eax, {_mask_for(size)}")
-            lines.append("    mov edi, eax")           # B (source)
-            lines.append(f"    mov esi, [reg_{dst}]") if dst.startswith(("D", "A")) else None
+            lines.append("    mov edi, eax")
             if dst.startswith(("D", "A")):
+                lines.append(f"    mov esi, [reg_{dst}]")
                 lines.append(f"    and esi, {_mask_for(size)}")
                 lines.append("    mov eax, esi")
                 arith = {
@@ -322,7 +319,6 @@ def emit_instruction(insn, labels):
                 lines.append(f"    {arith} eax, edi")
                 lines.append(f"    and eax, {_mask_for(size)}")
                 if base not in ("CMP", "CMPA"):
-                    # Preserva upper bits do dst
                     lines.append("    mov r9d, eax")
                     lines += emit_store_ea(dst, size)
                     lines.append("    mov eax, r9d")
@@ -436,7 +432,6 @@ def emit_instruction(insn, labels):
     # --- PEA ---
     if op == "PEA":
         src = ops.strip()
-        # Calcula endereço efetivo (não valor)
         if src.startswith("$"):
             a = int(src[1:], 16)
             lines.append(f"    mov edx, {a}")
@@ -456,14 +451,19 @@ def emit_instruction(insn, labels):
         t = _target(ops)
         if t is not None and t in labels:
             lines.append(f"    jmp {labels[t]}")
+        elif t is not None:
+            lines.append(f"    jmp function_{t:06X}")
         return lines
 
     # --- Bcc ---
     if op in CONDITIONAL_BRANCHES:
         t = _target(ops)
-        if t is not None and t in labels:
+        if t is not None:
             jcc = BCC_TO_JCC[op]
-            lines.append(f"    {jcc} {labels[t]}")
+            if t in labels:
+                lines.append(f"    {jcc} {labels[t]}")
+            else:
+                lines.append(f"    {jcc} function_{t:06X}")
         return lines
 
     # --- JSR / BSR ---
@@ -478,8 +478,11 @@ def emit_instruction(insn, labels):
     # --- JMP ---
     if op == "JMP":
         t = _target(ops)
-        if t is not None and t in labels:
-            lines.append(f"    jmp {labels[t]}")
+        if t is not None:
+            if t in labels:
+                lines.append(f"    jmp {labels[t]}")
+            else:
+                lines.append(f"    jmp function_{t:06X}")
         else:
             lines.append(f"    ; TODO JMP indireto: {ops}")
         return lines
@@ -508,10 +511,38 @@ def _emit_rom_data(lines, bin_path):
     lines.append("rom_data:")
     for i in range(0, len(data), 16):
         chunk = data[i:i + 16]
-        hexs = ", ".join(f"{b:02X}h" for b in chunk)
+        hexs = ", ".join(f"0{b:02X}h" for b in chunk)
         lines.append(f"    db {hexs}")
     lines.append(f"rom_size dq {len(data)}")
     lines.append("")
+
+
+def _read_vectors(bin_path):
+    """Lê SP inicial e entry point dos vetores de reset (big-endian)."""
+    data = Path(bin_path).read_bytes()
+    if len(data) < 8:
+        raise ValueError(f"BIN muito pequeno: {len(data)} bytes")
+    sp    = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]
+    entry = (data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7]
+    return sp, entry
+
+
+def _normalize_functions(functions):
+    """
+    CORRIGIDO: aceita set/list de ints OU de dicts com 'address'.
+    Retorna lista ordenada de endereços (ints).
+    """
+    result = []
+    for f in functions:
+        if isinstance(f, dict):
+            a = f.get("address")
+        elif isinstance(f, (tuple, list)):
+            a = f[0]
+        else:
+            a = f
+        if isinstance(a, int):
+            result.append(a)
+    return sorted(set(result))
 
 
 def generate(analysis, project_dir, embed_rom=True):
@@ -523,14 +554,30 @@ def generate(analysis, project_dir, embed_rom=True):
 
     instructions_by_addr = analysis["instructions_by_addr"]
     sorted_addrs = analysis["sorted_addrs"]
-    functions = set(analysis["functions"])
+    functions = _normalize_functions(analysis["functions"])   # CORRIGIDO
     labels = analysis.get("labels", {})
+
+    # --- Vetores de reset ---
+    if bin_path:
+        sp_init, entry_point = _read_vectors(bin_path)
+    else:
+        sp_init, entry_point = 0x00FFFE00, 0x000200
+
+    # --- Lista de funções a gerar, garantindo o entry point ---
+    function_starts = list(functions)
+    if entry_point not in function_starts and entry_point in instructions_by_addr:
+        function_starts.append(entry_point)
+    if not function_starts and sorted_addrs:
+        function_starts = [sorted_addrs[0]]
+    function_starts = sorted(set(function_starts))
 
     lines = []
     lines.append("; ============================================")
     lines.append("; MegaComp - x86-64 / MASM")
     lines.append("; ============================================")
     lines.append(f"; Source: {asm_path.name}")
+    lines.append(f"; SP inicial:    {sp_init:08X}h")
+    lines.append(f"; Entry point:   {entry_point:08X}h")
     lines.append("; ============================================")
     lines.append("")
     lines.append("include runtime.inc")
@@ -544,10 +591,7 @@ def generate(analysis, project_dir, embed_rom=True):
     lines.append(".code")
     lines.append("")
 
-    function_starts = sorted(functions)
-    if not function_starts and sorted_addrs:
-        function_starts = [sorted_addrs[0]]
-
+    # --- Geração de cada função ---
     for idx, start in enumerate(function_starts):
         end = function_starts[idx + 1] if idx + 1 < len(function_starts) else None
 
@@ -569,21 +613,37 @@ def generate(analysis, project_dir, embed_rom=True):
         lines.append(f"function_{start:06X} ENDP")
         lines.append("")
 
-    # Entry point
+        # --- Entry point ---
     lines.append("; ============================================")
-    lines.append("; Entry point")
+    lines.append("; Entry point 68000")
     lines.append("; ============================================")
     lines.append("public MegaComp_Main")
     lines.append("MegaComp_Main PROC")
-    lines.append("    mov dword ptr [reg_A7], 00FFFE00h")
-    if functions:
-        entry = functions[0]
-        lines.append(f"    call function_{entry:06X}")
+    lines.append(f"    mov dword ptr [reg_A7], {sp_init:08X}h")
+    lines.append(f"    call function_{entry_point:06X}")
     lines.append("    ret")
     lines.append("MegaComp_Main ENDP")
+    lines.append("")
+
+    # --- Entry point Windows (exit code = D0) ---
+    lines.append("; ============================================")
+    lines.append("; Entry point Windows")
+    lines.append("; Exit code = D0 (byte baixo)")
+    lines.append("; ============================================")
+    lines.append("EXTERN ExitProcess:PROC")
+    lines.append("public main")
+    lines.append("main PROC")
+    lines.append("    sub rsp, 28h")
+    lines.append("    call MegaComp_Main")
+    lines.append("    mov ecx, [reg_D0]")
+    lines.append("    call ExitProcess")
+    lines.append("main ENDP")
     lines.append("")
     lines.append("END")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"MASM: {output_path}")
+    print(f"  SP inicial:   {sp_init:08X}h")
+    print(f"  Entry point:  {entry_point:08X}h")
+    print(f"  Funções:      {len(function_starts)}")
     return output_path
