@@ -5,7 +5,7 @@ This guide will teach you how to use this SDK.
 
 WHAT DOES IT DO?:
 MegaComp SDK gets a standard Mega Drive/Genesis (No SegaCD, no 32x) ROM and 
-transforms it into x86_64 Assembly you can build with MASM. Yes, playing NATIVELY!
+transforms it into x86_64 Assembly you can build with MASM. Yes, playing NATIVELY (No emulators required)!
 
 REQUIREMENTS FOR USING:
 - A regular MegaDrive/Genesis ROM (No SegaCD, no 32x)
