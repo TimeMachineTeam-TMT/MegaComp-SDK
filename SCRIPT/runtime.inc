@@ -3,6 +3,7 @@
 ; ==========================================
 
 include input.inc
+include vdp.inc
 
 .const
 RAM_BASE equ 0FF0000h
@@ -62,15 +63,25 @@ flag_C db 0
 public md_ram
 md_ram db 65536 dup(0)
 
-; --- ROM (definida pelo codegen) ---
-;extern rom_data:byte
-;extern rom_size:qword
-
 .code
 
 ; ==========================================
 ; Memória
 ; ==========================================
+
+.code
+
+; ---- Forward declarations ----
+read_byte       PROTO
+read_word       PROTO
+read_long       PROTO
+write_byte      PROTO
+write_word      PROTO
+write_long      PROTO
+push_long_68k   PROTO
+pop_long_68k    PROTO
+
+; (a partir daqui vêm as PROCs como estão hoje)
 
 public read_byte
 read_byte PROC
@@ -100,18 +111,19 @@ read_byte ENDP
 
 public read_word
 read_word PROC
-    push rbx
-    push r12
-    mov rbx, rcx
-    call read_byte
-    mov r12d, eax
-    lea rcx, [rbx + 1]
-    call read_byte
-    shl r12d, 8
-    movzx eax, al
-    or eax, r12d
-    pop r12
-    pop rbx
+    mov rax, rcx
+    and rax, 0FFFFFFh
+    cmp rax, 0C00000h
+    jb  @@generic
+    cmp rax, 0C00010h
+    jae @@generic
+    cmp rax, 0C00004h
+    je  @@vdp_ctrl
+    cmp rax, 0C00008h
+    je  @@vdp_hv
+    cmp rax, 0C00000h
+    je  @@vdp_data
+    xor eax, eax
     ret
 read_word ENDP
 
@@ -126,11 +138,37 @@ read_long PROC
     call read_word
     shl r12d, 16
     movzx eax, ax
-    or eax, r12d
+    or  eax, r12d
     pop r12
     pop rbx
     ret
 read_long ENDP
+
+@@generic:
+    push rbx
+    push r12
+    mov rbx, rcx
+    call read_byte
+    mov r12d, eax
+    lea rcx, [rbx + 1]
+    call read_byte
+    shl r12d, 8
+    movzx eax, al
+    or  eax, r12d
+    pop r12
+    pop rbx
+    ret
+
+@@vdp_ctrl:
+    call vdp_read_ctrl
+    ret
+@@vdp_hv:
+    call vdp_read_hv
+    ret
+@@vdp_data:
+    call vdp_read_data
+    ret
+read_word ENDP
 
 public write_byte
 write_byte PROC
@@ -157,18 +195,40 @@ write_byte ENDP
 
 public write_word
 write_word PROC
+    ; --- VDP (0xC00000..0xC0000F) ---
+    mov rax, rcx
+    and rax, 0FFFFFFh
+    cmp rax, 0C00000h
+    jb  @@generic
+    cmp rax, 0C00010h
+    jae @@generic
+    cmp rax, 0C00004h
+    je  @@vdp_ctrl
+    cmp rax, 0C00000h
+    je  @@vdp_data
+    ret                        ; HV / PSG: ignora
+
+@@generic:
     push rbx
     push r12
     mov rbx, rcx
-    movzx r12d, dx           ; <-- corrigido: zero-extend
+    movzx r12d, dx             ; << zera bits altos (era mov r12w, dx)
     mov edx, r12d
     shr edx, 8
     call write_byte
     lea rcx, [rbx + 1]
-    movzx edx, r12b          ; <-- byte baixo
+    movzx edx, r12b
     call write_byte
     pop r12
     pop rbx
+    ret
+
+@@vdp_ctrl:
+    call vdp_write_ctrl
+    ret
+
+@@vdp_data:
+    call vdp_write_data
     ret
 write_word ENDP
 
