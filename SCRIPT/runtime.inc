@@ -65,12 +65,6 @@ md_ram db 65536 dup(0)
 
 .code
 
-; ==========================================
-; Memória
-; ==========================================
-
-.code
-
 ; ---- Forward declarations ----
 read_byte       PROTO
 read_word       PROTO
@@ -81,8 +75,9 @@ write_long      PROTO
 push_long_68k   PROTO
 pop_long_68k    PROTO
 
-; (a partir daqui vêm as PROCs como estão hoje)
-
+; ==========================================
+; read_byte
+; ==========================================
 public read_byte
 read_byte PROC
     mov rax, rcx
@@ -109,6 +104,9 @@ read_byte PROC
     ret
 read_byte ENDP
 
+; ==========================================
+; read_word
+; ==========================================
 public read_word
 read_word PROC
     mov rax, rcx
@@ -125,24 +123,6 @@ read_word PROC
     je  @@vdp_data
     xor eax, eax
     ret
-read_word ENDP
-
-public read_long
-read_long PROC
-    push rbx
-    push r12
-    mov rbx, rcx
-    call read_word
-    mov r12d, eax
-    lea rcx, [rbx + 2]
-    call read_word
-    shl r12d, 16
-    movzx eax, ax
-    or  eax, r12d
-    pop r12
-    pop rbx
-    ret
-read_long ENDP
 
 @@generic:
     push rbx
@@ -170,6 +150,29 @@ read_long ENDP
     ret
 read_word ENDP
 
+; ==========================================
+; read_long
+; ==========================================
+public read_long
+read_long PROC
+    push rbx
+    push r12
+    mov rbx, rcx
+    call read_word
+    mov r12d, eax
+    lea rcx, [rbx + 2]
+    call read_word
+    shl r12d, 16
+    movzx eax, ax
+    or  eax, r12d
+    pop r12
+    pop rbx
+    ret
+read_long ENDP
+
+; ==========================================
+; write_byte
+; ==========================================
 public write_byte
 write_byte PROC
     mov rax, rcx
@@ -193,6 +196,9 @@ write_byte PROC
     ret
 write_byte ENDP
 
+; ==========================================
+; write_word
+; ==========================================
 public write_word
 write_word PROC
     ; --- VDP (0xC00000..0xC0000F) ---
@@ -206,13 +212,13 @@ write_word PROC
     je  @@vdp_ctrl
     cmp rax, 0C00000h
     je  @@vdp_data
-    ret                        ; HV / PSG: ignora
+    ret
 
 @@generic:
     push rbx
     push r12
     mov rbx, rcx
-    movzx r12d, dx             ; << zera bits altos (era mov r12w, dx)
+    movzx r12d, dx
     mov edx, r12d
     shr edx, 8
     call write_byte
@@ -232,6 +238,9 @@ write_word PROC
     ret
 write_word ENDP
 
+; ==========================================
+; write_long
+; ==========================================
 public write_long
 write_long PROC
     push rbx
@@ -242,7 +251,7 @@ write_long PROC
     shr edx, 16
     call write_word
     lea rcx, [rbx + 2]
-    movzx edx, r12w          ; <-- zero-extend do low word
+    movzx edx, r12w
     call write_word
     pop r12
     pop rbx
@@ -279,12 +288,6 @@ pop_long_68k ENDP
 ; Helpers de flags
 ; ==========================================
 
-; build_flags_add
-;   esi = operando A (já mascarado ao tamanho)
-;   edi = operando B (já mascarado ao tamanho)
-;   eax = resultado (já mascarado ao tamanho)
-;   r8b = 'B' | 'W' | 'L'
-; Preserva eax
 public build_flags_add
 build_flags_add PROC
     push rbx
@@ -351,8 +354,6 @@ build_flags_add PROC
     ret
 build_flags_add ENDP
 
-; build_flags_sub
-;   esi = A, edi = B, eax = R = A - B
 public build_flags_sub
 build_flags_sub PROC
     push rbx
@@ -375,11 +376,9 @@ build_flags_sub PROC
     shr ebx, 31
     mov [flag_N], bl
 
-    ; C = borrow: A < B (unsigned, no tamanho)
     cmp esi, edi
     setb byte ptr [flag_C]
 
-    ; V = (A^B) & (A^R) no MSB do tamanho
     mov ebx, esi
     xor ebx, edi
     mov ecx, esi
@@ -406,8 +405,6 @@ build_flags_sub PROC
     ret
 build_flags_sub ENDP
 
-; build_flags_logic - após AND/OR/EOR
-;   eax = resultado mascarado
 public build_flags_logic
 build_flags_logic PROC
     test eax, eax
@@ -420,8 +417,6 @@ build_flags_logic PROC
     ret
 build_flags_logic ENDP
 
-; build_flags_move - após MOVE
-;   eax = valor mascarado
 public build_flags_move
 build_flags_move PROC
     test eax, eax

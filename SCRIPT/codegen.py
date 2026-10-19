@@ -506,8 +506,6 @@ def emit_instruction(insn, labels):
 
 def _emit_rom_data(lines, bin_path):
     data = Path(bin_path).read_bytes()
-    lines.append("public rom_data")
-    lines.append("public rom_size")
     lines.append("rom_data:")
     for i in range(0, len(data), 16):
         chunk = data[i:i + 16]
@@ -613,30 +611,11 @@ def generate(analysis, project_dir, embed_rom=True):
         lines.append(f"function_{start:06X} ENDP")
         lines.append("")
 
-        # --- Entry point ---
-    lines.append("; ============================================")
-    lines.append("; Entry point 68000")
-    lines.append("; ============================================")
-    lines.append("public MegaComp_Main")
-    lines.append("MegaComp_Main PROC")
-    lines.append(f"    mov dword ptr [reg_A7], {sp_init:08X}h")
-    lines.append(f"    call function_{entry_point:06X}")
-    lines.append("    ret")
-    lines.append("MegaComp_Main ENDP")
-    lines.append("")
-
     # --- Entry point Windows (exit code = D0) ---
-    lines.append("public Main")
-    lines.append("Main PROC")
-    lines.append(f"    mov dword ptr [reg_A7], {sp_init:08X}h")
-    lines.append(f"    call function_{entry_point:06X}")
-    lines.append("    ret")
-    lines.append("Main ENDP")
-    lines.append("")
     lines.append("public main")
     lines.append("main PROC")
     lines.append("    sub rsp, 28h")
-    lines.append("    call Main")
+    lines.append("    call MegaComp_Main")
     lines.append("    ret")
     lines.append("main ENDP")
     lines.append("")
