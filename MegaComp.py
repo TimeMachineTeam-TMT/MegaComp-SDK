@@ -152,7 +152,7 @@ def main():
     print(f"  ASM x86-64 : {win_asm_path}")
     print()
     print("Para compilar o ASM x86-64, veja:")
-    print(f"  {project_dir / 'README_BUILD.md'}")
+    print(f"  {project_dir / 'README.txt'}")
 
 
 if __name__ == "__main__":
