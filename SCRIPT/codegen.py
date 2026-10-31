@@ -612,14 +612,17 @@ def generate(analysis, project_dir, embed_rom=True):
         lines.append("")
 
     # --- Entry point Windows (exit code = D0) ---
-    lines.append("public main")
+        lines.append("public main")
     lines.append("main PROC")
     lines.append("    sub rsp, 28h")
-    lines.append("    call MegaComp_Main")
-    lines.append("    ret")
+    lines.append("    call mc_create_window")
+    lines.append("    call main")           
+    lines.append("    ; ---- nunca chega aqui ----")
+    lines.append("    call mc_render_backdrop")
+    lines.append("    call mc_message_loop")
+    lines.append("    xor ecx, ecx")
+    lines.append("    call ExitProcess")
     lines.append("main ENDP")
-    lines.append("")
-    lines.append("END")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"MASM: {output_path}")

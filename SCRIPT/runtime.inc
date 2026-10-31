@@ -4,6 +4,7 @@
 
 include input.inc
 include vdp.inc
+include window.inc
 
 .const
 RAM_BASE equ 0FF0000h
