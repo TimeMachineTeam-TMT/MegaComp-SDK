@@ -242,6 +242,7 @@ def emit_instruction(insn, labels):
 
     # --- RTS / RTE / RTR ---
     if op in ("RTS", "RTE", "RTR"):
+        lines.append("    add rsp, 28h")
         lines.append("    ret")
         return lines
 
@@ -604,6 +605,7 @@ def generate(analysis, project_dir, embed_rom=True):
         lines.append(f"; função ${start:06X}")
         lines.append(f"public function_{start:06X}")
         lines.append(f"function_{start:06X} PROC")
+        lines.append("    sub rsp, 28h")
 
         addr = start
         visited = set()

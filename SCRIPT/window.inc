@@ -49,6 +49,7 @@ hwnd_mc        dq 0
 ; ==========================================
 public mc_render_backdrop
 mc_render_backdrop PROC
+    push rdi
     movzx eax, byte ptr [vdp_regs + 7]
     and eax, 03Fh
     lea r8, vdp_cram
@@ -83,6 +84,7 @@ mc_render_backdrop PROC
     add rdi, 4
     dec ecx
     jnz @@fill
+    pop rdi
     ret
 mc_render_backdrop ENDP
 
@@ -93,6 +95,7 @@ public mc_blit
 mc_blit PROC
     push rbx
     push r12
+    sub rsp, 8
 
     mov rcx, [hwnd_mc]
     call GetDC
@@ -111,7 +114,7 @@ mc_blit PROC
     mov dword ptr [rbx + 32], 0
     mov dword ptr [rbx + 36], 0
 
-    sub rsp, 104
+    sub rsp, 112
     mov dword ptr [rsp + 20h], MD_H
     mov qword ptr [rsp + 28h], 0
     mov qword ptr [rsp + 30h], 0
@@ -129,12 +132,13 @@ mc_blit PROC
     xor r8d, r8d
     mov r9d, MD_W
     call StretchDIBits
-    add rsp, 104
+    add rsp, 112
 
     mov rcx, [hwnd_mc]
     mov rdx, r12
     call ReleaseDC
 
+    add rsp, 8
     pop r12
     pop rbx
     ret
@@ -235,12 +239,15 @@ mc_create_window ENDP
 ; ==========================================
 public mc_message_loop
 mc_message_loop PROC
+    sub rsp, 28h
+
 @@loop:
     lea rcx, wnd_msg_buf
     xor edx, edx
     xor r8d, r8d
     xor r9d, r9d
     call GetMessageA
+
     test eax, eax
     jle @@done
 
@@ -249,7 +256,10 @@ mc_message_loop PROC
 
     lea rcx, wnd_msg_buf
     call DispatchMessageA
+
     jmp @@loop
+
 @@done:
+    add rsp, 28h
     ret
 mc_message_loop ENDP
