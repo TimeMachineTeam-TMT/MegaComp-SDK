@@ -449,7 +449,15 @@ def emit_instruction(insn, labels):
     # --- BRA ---
     if op == "BRA":
         t = _target(ops)
-        if t is not None and t in labels:
+        if t == addr:
+            # ROM de teste: um BRA para si mesmo representa o idle final.
+            # Renderiza o estado já configurado e entrega o controle ao loop Win32.
+            lines.append("    call mc_render_backdrop")
+            lines.append("    call mc_blit")
+            lines.append("    call mc_message_loop")
+            lines.append("    xor ecx, ecx")
+            lines.append("    call ExitProcess")
+        elif t is not None and t in labels:
             lines.append(f"    jmp {labels[t]}")
         elif t is not None:
             lines.append(f"    jmp function_{t:06X}")
@@ -611,14 +619,16 @@ def generate(analysis, project_dir, embed_rom=True):
         lines.append(f"function_{start:06X} ENDP")
         lines.append("")
 
-    # --- Entry point Windows (exit code = D0) ---
-        lines.append("public main")
+    # --- Entry point Windows ---
+    lines.append("public main")
     lines.append("main PROC")
     lines.append("    sub rsp, 28h")
     lines.append("    call mc_create_window")
-    lines.append("    call main")           
-    lines.append("    ; ---- nunca chega aqui ----")
+    lines.append(f"    mov dword ptr [reg_A7], 0{sp_init:08X}h")
+    lines.append(f"    call function_{entry_point:06X}")
+    # Caminho de retorno para ROMs cujo entry point retorna normalmente.
     lines.append("    call mc_render_backdrop")
+    lines.append("    call mc_blit")
     lines.append("    call mc_message_loop")
     lines.append("    xor ecx, ecx")
     lines.append("    call ExitProcess")

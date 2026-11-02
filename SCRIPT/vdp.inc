@@ -16,8 +16,8 @@ VDP_VSRAM_SIZE  equ 50h
 ; CD codes (bits 15-14 do primeiro half do address write)
 VDP_CD_VRAM_RD  equ 0
 VDP_CD_VRAM_WR  equ 1
-VDP_CD_CRAM_WR  equ 2
-VDP_CD_VSRAM_WR equ 3
+VDP_CD_VSRAM_WR equ 2 ; reservado: ainda não implementado corretamente
+VDP_CD_CRAM_WR  equ 3
 
 .data
 
@@ -119,9 +119,7 @@ vdp_write_data PROC
     je  @@vram
     cmp eax, VDP_CD_CRAM_WR
     je  @@cram
-    cmp eax, VDP_CD_VSRAM_WR
-    je  @@vsram
-    jmp @@advance                  ; VRAM read: ignora escrita
+    jmp @@advance                  ; operações ainda não implementadas são ignoradas
 
 @@vram:
     and ebx, 0FFFFh
@@ -132,12 +130,6 @@ vdp_write_data PROC
 @@cram:
     and ebx, 07Eh                  ; CRAM tem 64 entradas de 2 bytes
     lea r8, vdp_cram
-    mov word ptr [r8 + rbx], r12w
-    jmp @@advance
-
-@@vsram:
-    and ebx, 07Eh
-    lea r8, vdp_vsram
     mov word ptr [r8 + rbx], r12w
     jmp @@advance
 
