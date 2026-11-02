@@ -633,6 +633,8 @@ def generate(analysis, project_dir, embed_rom=True):
     lines.append("    xor ecx, ecx")
     lines.append("    call ExitProcess")
     lines.append("main ENDP")
+    lines.append("")
+    lines.append("END")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"MASM: {output_path}")
